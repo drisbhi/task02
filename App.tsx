@@ -1,117 +1,205 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
+import ProductCard from './component/ProductCard';
+import {fetchCategories, fetchProductsByCategory} from './component/api';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
+interface Product {
+  id: number;
+  brand: string;
+  category: string;
+  description: string;
+  discountPercentage: number;
+  images: string[];
+  price: number;
+  rating: number;
+  stock: number;
+  thumbnail: string;
   title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
 }
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+const App: React.FC = () => {
+  const [category, setCategory] = useState<string[]>([]);
+  const [products, setProduct] = useState<Product[]>([]);
+  const [loadingCategory, setLoadingCategory] = useState<boolean>(true);
+  const [loadingProducts, setLoadingProducts] = useState<boolean>(false);
+  const [errorCategory, setErrorCategory] = useState<string | null>(null);
+  const [errorProducts, setErrorProducts] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  const flatListRef = useRef<FlatList<string> | null>(null);
+
+  useEffect(() => {
+    getCategory();
+  }, []);
+
+  const renderItem = ({item}: {item: string}) => {
+    return (
+      <View style={styles.tab}>
+        <Text style={styles.tabText} onPress={() => handleProductItem(item)}>
+          {item}
+        </Text>
+      </View>
+    );
+  };
+
+  const handleProductItem = (selectedItem: string) => {
+    setSelectedCategory(selectedItem);
+    getProductDetails(selectedItem);
+  };
+
+  const getProductDetails = async (selectedItem: string) => {
+    try {
+      setLoadingProducts(true);
+      const response = await fetchProductsByCategory(selectedItem);
+      if (response.success) {
+        setProduct(response.data || []);
+      } else {
+        setErrorProducts(response.error || 'Unknown error');
+      }
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const getCategory = async () => {
+    try {
+      setLoadingCategory(true);
+      const response = await fetchCategories();
+      if (response.success) {
+        setCategory(response.data || []);
+      } else {
+        setErrorCategory(response.error || 'Unknown error');
+      }
+    } finally {
+      setLoadingCategory(false);
+    }
+  };
+
+  const handleEndReached = () => {
+    if (category.length > 0 && selectedCategory) {
+      const lastItem = category[category.length - 1];
+      if (lastItem !== selectedCategory) {
+        handleProductItem(lastItem);
+      }
+    }
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <Text style={styles.headingText}>Tab Task</Text>
+
+      {/* Loading indicator for category */}
+      {loadingCategory && <ActivityIndicator size="large" color="#0000ff" />}
+
+      {/* Error message for category */}
+      {errorCategory && <Text style={styles.errorText}>{errorCategory}</Text>}
+
+      {/* Horizontal FlatList */}
+      <FlatList
+  ref={(ref) => (flatListRef.current = ref)}
+  data={category}
+  renderItem={renderItem}
+  keyExtractor={() => Math.random() + ''}
+  horizontal={true}
+  onScroll={(event) => {
+    const viewSize = event.nativeEvent.layoutMeasurement.width;
+    const contentOffset = event.nativeEvent.contentOffset.x;
+
+    // Calculate the index of the first fully visible item
+    const index = Math.floor(contentOffset / viewSize);
+
+    // Calculate the progress towards the next item
+    const progress = (contentOffset - viewSize * index) / viewSize;
+
+    // Check if we should switch to the next item
+    if (progress > 0.1) {
+      const selectedItem = category[index + 1];
+      if (selectedItem !== selectedCategory) {
+        handleProductItem(selectedItem);
+      }
+    } else {
+      const selectedItem = category[index];
+      if (selectedItem !== selectedCategory) {
+        handleProductItem(selectedItem);
+      }
+    }
+  }}
+  onEndReached={handleEndReached}
+  onEndReachedThreshold={0.1}
+  scrollEventThrottle={10}
+/>
+
+
+      {selectedCategory && (
+        <Text style={styles.selectedCategoryText}>
+          Selected Category: {selectedCategory}
+        </Text>
+      )}
+
+      {/* Loading indicator for products */}
+      {loadingProducts && <ActivityIndicator size="large" color="#0000ff" />}
+
+      {/* Error message for products */}
+      {errorProducts && <Text style={styles.errorText}>{errorProducts}</Text>}
+
+      {/* Vertical FlatList for products */}
+      {products.length > 0 && (
+        <FlatList
+          data={products}
+          renderItem={({item}) => <ProductCard product={item} />}
+          keyExtractor={item => item.id.toString()}
+        />
+      )}
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    marginTop: 50,
+    alignItems: 'center',
   },
-  sectionTitle: {
+  tab: {
+    padding: 5,
+    marginRight: 10,
+    backgroundColor: '#eee',
+    borderRadius: 8,
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  productContainer: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  productText: {
+    fontSize: 16,
+  },
+  errorText: {
+    color: 'red',
+    marginTop: 10,
+  },
+  headingText: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: 'black',
+    marginBottom: 20,
   },
-  sectionDescription: {
-    marginTop: 8,
+  flatListContainer: {
+    marginVertical: 20, // Add space between FlatLists
+  },
+  selectedCategoryText: {
     fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
+    fontWeight: 'bold',
+    marginTop: 10,
   },
 });
 
