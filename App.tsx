@@ -1,7 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, FlatList, ActivityIndicator } from 'react-native';
+import React, {useEffect, useState, useRef} from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  ActivityIndicator,
+} from 'react-native';
 import ProductCard from './component/ProductCard';
-import { fetchCategories, fetchProductsByCategory } from './component/api';
+import {fetchCategories, fetchProductsByCategory} from './component/api';
 
 interface Product {
   id: number;
@@ -26,11 +32,13 @@ const App: React.FC = () => {
   const [errorProducts, setErrorProducts] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  const flatListRef = useRef<FlatList<string> | null>(null);
+
   useEffect(() => {
     getCategory();
   }, []);
 
-  const renderItem = ({ item }: { item: string }) => {
+  const renderItem = ({item}: {item: string}) => {
     return (
       <View style={styles.tab}>
         <Text style={styles.tabText} onPress={() => handleProductItem(item)}>
@@ -73,6 +81,15 @@ const App: React.FC = () => {
     }
   };
 
+  const handleEndReached = () => {
+    if (category.length > 0 && selectedCategory) {
+      const lastItem = category[category.length - 1];
+      if (lastItem !== selectedCategory) {
+        handleProductItem(lastItem);
+      }
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.headingText}>Tab Task</Text>
@@ -83,15 +100,46 @@ const App: React.FC = () => {
       {/* Error message for category */}
       {errorCategory && <Text style={styles.errorText}>{errorCategory}</Text>}
 
+      {/* Horizontal FlatList */}
       <FlatList
-        data={category}
-        renderItem={renderItem}
-        keyExtractor={() => Math.random() + ''}
-        horizontal={true}
-      />
+  ref={(ref) => (flatListRef.current = ref)}
+  data={category}
+  renderItem={renderItem}
+  keyExtractor={() => Math.random() + ''}
+  horizontal={true}
+  onScroll={(event) => {
+    const viewSize = event.nativeEvent.layoutMeasurement.width;
+    const contentOffset = event.nativeEvent.contentOffset.x;
+
+    // Calculate the index of the first fully visible item
+    const index = Math.floor(contentOffset / viewSize);
+
+    // Calculate the progress towards the next item
+    const progress = (contentOffset - viewSize * index) / viewSize;
+
+    // Check if we should switch to the next item
+    if (progress > 0.1) {
+      const selectedItem = category[index + 1];
+      if (selectedItem !== selectedCategory) {
+        handleProductItem(selectedItem);
+      }
+    } else {
+      const selectedItem = category[index];
+      if (selectedItem !== selectedCategory) {
+        handleProductItem(selectedItem);
+      }
+    }
+  }}
+  onEndReached={handleEndReached}
+  onEndReachedThreshold={0.1}
+  scrollEventThrottle={10}
+/>
+
 
       {selectedCategory && (
-        <Text style={styles.selectedCategoryText}>Selected Category: {selectedCategory}</Text>
+        <Text style={styles.selectedCategoryText}>
+          Selected Category: {selectedCategory}
+        </Text>
       )}
 
       {/* Loading indicator for products */}
@@ -100,11 +148,12 @@ const App: React.FC = () => {
       {/* Error message for products */}
       {errorProducts && <Text style={styles.errorText}>{errorProducts}</Text>}
 
+      {/* Vertical FlatList for products */}
       {products.length > 0 && (
         <FlatList
           data={products}
-          renderItem={({ item  }) => <ProductCard product={item} />}
-          keyExtractor={(item) => item.id.toString()}
+          renderItem={({item}) => <ProductCard product={item} />}
+          keyExtractor={item => item.id.toString()}
         />
       )}
     </View>
